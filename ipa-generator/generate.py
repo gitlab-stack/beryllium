@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # beryllium ipa generator
 # builds standalone .ipa files that wrap a single website into a native ios app.
-# requires macos with xcode command line tools installed.
+# requires macos with xcode command line tools and xcodegen installed.
 
 import argparse
 import json
@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
-TEMPLATE_DIR = SCRIPT_DIR / "templates"
 
 
 def log(msg):
@@ -27,11 +26,13 @@ def error(msg):
 
 
 def check_requirements():
-    """make sure we're on macos with xcode tools available."""
+    """make sure we're on macos with xcode tools and xcodegen available."""
     if sys.platform != "darwin":
         error("ipa generation requires macos with xcode installed.")
     if shutil.which("xcodebuild") is None:
         error("xcodebuild not found. install xcode command line tools: xcode-select --install")
+    if shutil.which("xcodegen") is None:
+        error("xcodegen not found. install it with: brew install xcodegen")
 
 
 def parse_config(config_path):
@@ -174,156 +175,35 @@ def generate_info_plist(config):
     return plist
 
 
-def generate_xcodeproj(config, project_dir):
-    """generate a minimal xcode project for the stub app."""
-    # we use a simplified pbxproj that xcodebuild can process
-    pbxproj_content = '''// !$*UTF8*$!
-{
-    archiveVersion = 1;
-    classes = {};
-    objectVersion = 56;
-    objects = {
-        B10000001 /* WrappedApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000001;};
-        B10000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B20000002;};
-        B20000001 /* WrappedApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrappedApp.swift; sourceTree = "<group>";};
-        B20000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";};
-        B20000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>";};
-        B30000001 /* BerylliumStub.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BerylliumStub.app; sourceTree = BUILT_PRODUCTS_DIR;};
-        B40000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;};
-        B50000001 = {isa = PBXGroup; children = (B50000002, B50000003); sourceTree = "<group>";};
-        B50000002 /* BerylliumStub */ = {isa = PBXGroup; children = (B20000001, B20000002, B20000003); path = BerylliumStub; sourceTree = "<group>";};
-        B50000003 /* Products */ = {isa = PBXGroup; children = (B30000001); name = Products; sourceTree = "<group>";};
-        B60000001 /* BerylliumStub */ = {
-            isa = PBXNativeTarget;
-            buildConfigurationList = B80000002;
-            buildPhases = (B70000001, B40000001, B70000002);
-            buildRules = ();
-            dependencies = ();
-            name = BerylliumStub;
-            productName = BerylliumStub;
-            productReference = B30000001;
-            productType = "com.apple.product-type.application";
-        };
-        B90000001 /* Project object */ = {
-            isa = PBXProject;
-            attributes = {
-                BuildIndependentTargetsInParallel = 1;
-                LastSwiftUpdateCheck = 1500;
-                LastUpgradeCheck = 1500;
-                TargetAttributes = { B60000001 = { CreatedOnToolsVersion = 15.0; }; };
-            };
-            buildConfigurationList = B80000001;
-            compatibilityVersion = "Xcode 14.0";
-            developmentRegion = en;
-            hasScannedForEncodings = 0;
-            knownRegions = (en, Base);
-            mainGroup = B50000001;
-            productRefGroup = B50000003;
-            projectDirPath = "";
-            projectRoot = "";
-            targets = (B60000001);
-        };
-        B70000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B10000001); runOnlyForDeploymentPostprocessing = 0;};
-        B70000002 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (B10000002); runOnlyForDeploymentPostprocessing = 0;};
-        B80000001 /* Build configuration list for PBXProject */ = {
-            isa = XCConfigurationList;
-            buildConfigurations = (B80000011, B80000012);
-            defaultConfigurationIsVisible = 0;
-            defaultConfigurationName = Release;
-        };
-        B80000002 /* Build configuration list for PBXNativeTarget */ = {
-            isa = XCConfigurationList;
-            buildConfigurations = (B80000021, B80000022);
-            defaultConfigurationIsVisible = 0;
-            defaultConfigurationName = Release;
-        };
-        B80000011 /* Debug */ = {
-            isa = XCBuildConfiguration;
-            buildSettings = {
-                ALWAYS_SEARCH_USER_PATHS = NO;
-                CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-                CLANG_ENABLE_MODULES = YES;
-                CLANG_ENABLE_OBJC_ARC = YES;
-                COPY_PHASE_STRIP = NO;
-                DEBUG_INFORMATION_FORMAT = dwarf;
-                ENABLE_TESTABILITY = YES;
-                GCC_DYNAMIC_NO_PIC = NO;
-                GCC_OPTIMIZATION_LEVEL = 0;
-                IPHONEOS_DEPLOYMENT_TARGET = ''' + config["deployment_target"] + ''';
-                MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-                ONLY_ACTIVE_ARCH = YES;
-                SDKROOT = iphoneos;
-                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
-                SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-            };
-            name = Debug;
-        };
-        B80000012 /* Release */ = {
-            isa = XCBuildConfiguration;
-            buildSettings = {
-                ALWAYS_SEARCH_USER_PATHS = NO;
-                CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-                CLANG_ENABLE_MODULES = YES;
-                CLANG_ENABLE_OBJC_ARC = YES;
-                COPY_PHASE_STRIP = NO;
-                DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-                ENABLE_NS_ASSERTIONS = NO;
-                IPHONEOS_DEPLOYMENT_TARGET = ''' + config["deployment_target"] + ''';
-                SDKROOT = iphoneos;
-                SWIFT_COMPILATION_MODE = wholemodule;
-                VALIDATE_PRODUCT = YES;
-            };
-            name = Release;
-        };
-        B80000021 /* Debug */ = {
-            isa = XCBuildConfiguration;
-            buildSettings = {
-                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-                CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 1;
-                GENERATE_INFOPLIST_FILE = YES;
-                INFOPLIST_FILE = BerylliumStub/Info.plist;
-                INFOPLIST_KEY_CFBundleDisplayName = "''' + config["name"].replace('"', '\\"') + '''";
-                INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-                INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-                LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
-                MARKETING_VERSION = ''' + config["version"] + ''';
-                PRODUCT_BUNDLE_IDENTIFIER = "''' + config["bundle_id"] + '''";
-                PRODUCT_NAME = "$(TARGET_NAME)";
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-                SWIFT_EMIT_LOC_STRINGS = YES;
-                SWIFT_VERSION = 5.0;
-                TARGETED_DEVICE_FAMILY = "1,2";
-            };
-            name = Debug;
-        };
-        B80000022 /* Release */ = {
-            isa = XCBuildConfiguration;
-            buildSettings = {
-                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-                CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 1;
-                GENERATE_INFOPLIST_FILE = YES;
-                INFOPLIST_FILE = BerylliumStub/Info.plist;
-                INFOPLIST_KEY_CFBundleDisplayName = "''' + config["name"].replace('"', '\\"') + '''";
-                INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-                INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-                LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
-                MARKETING_VERSION = ''' + config["version"] + ''';
-                PRODUCT_BUNDLE_IDENTIFIER = "''' + config["bundle_id"] + '''";
-                PRODUCT_NAME = "$(TARGET_NAME)";
-                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-                SWIFT_EMIT_LOC_STRINGS = YES;
-                SWIFT_VERSION = 5.0;
-                TARGETED_DEVICE_FAMILY = "1,2";
-            };
-            name = Release;
-        };
-    };
-    rootObject = B90000001;
-}
+def generate_xcodegen_spec(config):
+    """generate a project.yml for xcodegen."""
+    # yaml doesn't need a library for this simple structure
+    return f'''name: BerylliumStub
+options:
+  bundleIdPrefix: com.beryllium
+  deploymentTarget:
+    iOS: "{config["deployment_target"]}"
+targets:
+  BerylliumStub:
+    type: application
+    platform: iOS
+    sources:
+      - path: BerylliumStub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "{config["bundle_id"]}"
+        INFOPLIST_FILE: BerylliumStub/Info.plist
+        GENERATE_INFOPLIST_FILE: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "{config["version"]}"
+        INFOPLIST_KEY_CFBundleDisplayName: "{config["name"]}"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
 '''
-    return pbxproj_content
 
 
 def setup_app_icon(config, assets_dir):
@@ -363,7 +243,7 @@ def setup_app_icon(config, assets_dir):
 
 
 def build_ipa(project_dir, output_path, config):
-    """run xcodebuild to archive and export an ipa."""
+    """run xcodebuild to archive and package an ipa."""
     scheme = "BerylliumStub"
     archive_path = project_dir / "build" / f"{scheme}.xcarchive"
 
@@ -376,6 +256,10 @@ def build_ipa(project_dir, output_path, config):
         "-archivePath", str(archive_path),
         "-sdk", "iphoneos",
         "-configuration", "Release",
+        "-destination", "generic/platform=iOS",
+        "CODE_SIGN_IDENTITY=",
+        "CODE_SIGNING_REQUIRED=NO",
+        "CODE_SIGNING_ALLOWED=NO",
         "SKIP_INSTALL=NO",
         "BUILD_LIBRARY_FOR_DISTRIBUTION=YES",
     ]
@@ -383,49 +267,13 @@ def build_ipa(project_dir, output_path, config):
     result = subprocess.run(archive_cmd, capture_output=True, text=True)
     if result.returncode != 0:
         log("xcodebuild archive output:")
-        print(result.stderr)
-        error("archive failed. make sure xcode and a valid signing identity are configured.")
+        print(result.stdout[-3000:] if len(result.stdout) > 3000 else result.stdout)
+        print(result.stderr[-3000:] if len(result.stderr) > 3000 else result.stderr)
+        error("archive failed. check the output above for details.")
 
-    log("exporting ipa...")
-    export_dir = project_dir / "build" / "export"
-
-    # create export options plist
-    export_options = {
-        "method": "development",
-        "compileBitcode": False,
-        "stripSwiftSymbols": True,
-        "thinning": "<none>",
-    }
-    export_plist_path = project_dir / "ExportOptions.plist"
-    with open(export_plist_path, "wb") as f:
-        plistlib.dump(export_options, f)
-
-    export_cmd = [
-        "xcodebuild",
-        "-exportArchive",
-        "-archivePath", str(archive_path),
-        "-exportOptionsPlist", str(export_plist_path),
-        "-exportPath", str(export_dir),
-    ]
-
-    result = subprocess.run(export_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        log("xcodebuild export output:")
-        print(result.stderr)
-
-        # fallback: manually package the .app into an ipa
-        log("falling back to manual ipa packaging...")
-        manual_ipa(archive_path, output_path)
-        return
-
-    # find the generated ipa and move it to the output path
-    for f in export_dir.iterdir():
-        if f.suffix == ".ipa":
-            shutil.move(str(f), str(output_path))
-            log(f"ipa saved to: {output_path}")
-            return
-
-    error("export succeeded but no .ipa was found in the output.")
+    # manually package the .app into an ipa (no export needed for unsigned)
+    log("packaging ipa...")
+    manual_ipa(archive_path, output_path)
 
 
 def manual_ipa(archive_path, output_path):
@@ -456,11 +304,9 @@ def generate(config, output_path):
     with tempfile.TemporaryDirectory(prefix="beryllium-") as tmp:
         project_dir = Path(tmp)
         source_dir = project_dir / "BerylliumStub"
-        xcodeproj_dir = project_dir / "BerylliumStub.xcodeproj"
         assets_dir = source_dir / "Assets.xcassets"
 
         source_dir.mkdir()
-        xcodeproj_dir.mkdir()
         assets_dir.mkdir(parents=True)
 
         # write swift source
@@ -473,57 +319,32 @@ def generate(config, output_path):
         with open(source_dir / "Info.plist", "wb") as f:
             plistlib.dump(info_plist, f)
 
-        # write xcode project
-        pbxproj = generate_xcodeproj(config, project_dir)
-        with open(xcodeproj_dir / "project.pbxproj", "w") as f:
-            f.write(pbxproj)
-
-        # write xcscheme so xcodebuild can find it
-        schemes_dir = xcodeproj_dir / "xcshareddata" / "xcschemes"
-        schemes_dir.mkdir(parents=True)
-        write_scheme(schemes_dir / "BerylliumStub.xcscheme")
+        # write xcodegen project spec
+        spec = generate_xcodegen_spec(config)
+        spec_path = project_dir / "project.yml"
+        with open(spec_path, "w") as f:
+            f.write(spec)
 
         # setup app icon
         setup_app_icon(config, assets_dir)
 
+        # run xcodegen to create the .xcodeproj
+        log("generating xcode project with xcodegen...")
+        result = subprocess.run(
+            ["xcodegen", "generate", "--spec", str(spec_path)],
+            capture_output=True,
+            text=True,
+            cwd=str(project_dir),
+        )
+        if result.returncode != 0:
+            log("xcodegen output:")
+            print(result.stderr)
+            error("xcodegen failed to generate the project.")
+
+        log("xcode project generated successfully")
+
         # build
         build_ipa(project_dir, Path(output_path), config)
-
-
-def write_scheme(path):
-    """write a minimal xcscheme file for xcodebuild."""
-    scheme_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<Scheme LastUpgradeVersion="1500" version="1.7">
-   <BuildAction buildImplicitDependencies="YES" parallelizeBuildables="YES">
-      <BuildActionEntries>
-         <BuildActionEntry buildForRunning="YES" buildForTesting="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
-            <BuildableReference
-               BuildableIdentifier="primary"
-               BlueprintIdentifier="B60000001"
-               BuildableName="BerylliumStub.app"
-               BlueprintName="BerylliumStub"
-               ReferencedContainer="container:BerylliumStub.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-      </BuildActionEntries>
-   </BuildAction>
-   <LaunchAction selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">
-      <BuildableProductRunnable runnableDebuggingMode="0">
-         <BuildableReference
-            BuildableIdentifier="primary"
-            BlueprintIdentifier="B60000001"
-            BuildableName="BerylliumStub.app"
-            BlueprintName="BerylliumStub"
-            ReferencedContainer="container:BerylliumStub.xcodeproj">
-         </BuildableReference>
-      </BuildableProductRunnable>
-   </LaunchAction>
-   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES">
-   </ArchiveAction>
-</Scheme>
-'''
-    with open(path, "w") as f:
-        f.write(scheme_xml)
 
 
 def main():

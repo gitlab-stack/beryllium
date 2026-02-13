@@ -1,0 +1,16 @@
+# generated xcode project (regenerate with: xcodegen generate)
+Beryllium.xcodeproj/
+
+# xcode user data
+*.xcuserdata/
+xcuserdata/
+*.xcworkspace/
+
+# build artifacts
+build/
+DerivedData/
+*.ipa
+
+# os junk
+.DS_Store
+*.swp

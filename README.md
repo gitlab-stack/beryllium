@@ -30,9 +30,18 @@ beryllium wraps any website into a native ios/ipados container using wkwebview. 
 
 ### locally (requires a mac)
 
-1. open `Beryllium.xcodeproj` in xcode
-2. select your development team under signing & capabilities
-3. build and run on your device or simulator
+the xcode project is generated from `project.yml` using [xcodegen](https://github.com/yonaskolb/XcodeGen):
+
+```bash
+brew install xcodegen
+xcodegen generate
+open Beryllium.xcodeproj
+```
+
+1. run `xcodegen generate` to create the `.xcodeproj`
+2. open `Beryllium.xcodeproj` in xcode
+3. select your development team under signing & capabilities
+4. build and run on your device or simulator
 
 ### without a mac (github actions)
 
@@ -90,6 +99,7 @@ see [ipa-generator/README.md](ipa-generator/README.md) for full documentation.
 ## project structure
 
 ```
+project.yml                             # xcodegen spec (generates .xcodeproj)
 Beryllium/                              # ios/ipados app
 ├── BerylliumApp.swift                  # app entry point
 ├── Info.plist                          # app configuration and url scheme registration

@@ -1,0 +1,14 @@
+{
+    "name": "my app",
+    "url": "https://example.com",
+    "bundle_id": "com.beryllium.wrap.my-app",
+    "orientation": "automatic",
+    "javascript": true,
+    "stikjit": false,
+    "inline_media": true,
+    "fullscreen": false,
+    "user_agent": "",
+    "icon_path": null,
+    "version": "1.0",
+    "deployment_target": "16.0"
+}

@@ -64,15 +64,8 @@ struct SiteRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // colored icon circle with first letter of the site name
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(hex: site.iconColorHex) ?? .blue)
-                    .frame(width: 48, height: 48)
-                Text(String(site.name.prefix(1)).uppercased())
-                    .font(.title2.bold())
-                    .foregroundColor(.white)
-            }
+            // site icon - either custom image or colored letter fallback
+            SiteIconView(site: site, size: 48)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(site.name)
@@ -98,6 +91,35 @@ struct SiteRow: View {
         case .portrait: return "iphone"
         case .landscape: return "iphone.landscape"
         case .automatic: return "arrow.triangle.2.circlepath"
+        }
+    }
+}
+
+// reusable icon view that renders the correct icon type for a site
+struct SiteIconView: View {
+    let site: WebSite
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let image = site.iconSource.uiImage {
+                // custom or favicon image
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+            } else {
+                // fallback: colored square with first letter
+                ZStack {
+                    RoundedRectangle(cornerRadius: size * 0.22)
+                        .fill(Color(hex: site.iconColorHex) ?? .blue)
+                        .frame(width: size, height: size)
+                    Text(String(site.name.prefix(1)).uppercased())
+                        .font(.system(size: size * 0.45, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
         }
     }
 }

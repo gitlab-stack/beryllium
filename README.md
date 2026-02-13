@@ -28,9 +28,33 @@ beryllium wraps any website into a native ios/ipados container using wkwebview. 
 
 ## building
 
+### locally (requires a mac)
+
 1. open `Beryllium.xcodeproj` in xcode
 2. select your development team under signing & capabilities
 3. build and run on your device or simulator
+
+### without a mac (github actions)
+
+you don't need a mac at all — github actions builds the ipa for you in the cloud:
+
+**build the main beryllium app:**
+
+1. go to the **actions** tab in your github repo
+2. select **build beryllium ipa**
+3. click **run workflow** (optionally pick debug/release)
+4. when it finishes, download the ipa from the **artifacts** section
+
+**build a single-site wrapper ipa:**
+
+1. go to **actions** > **build site wrapper ipa**
+2. click **run workflow**
+3. fill in the site name, url, and options (orientation, stikjit, etc.)
+4. download the generated ipa from artifacts
+
+the ipas are unsigned but work with sideloading tools like altstore, sidestore, trollstore, or any signing service.
+
+the main app ipa is also auto-built on every push to `main` and attached to github releases when you push a version tag (e.g. `v1.0`).
 
 ## usage
 
@@ -86,4 +110,8 @@ ipa-generator/                          # macos command-line tool
 ├── generate.py                         # ipa build script
 ├── example-config.json                 # sample site config
 └── README.md                           # generator documentation
+
+.github/workflows/                      # ci/cd pipelines
+├── build-ipa.yml                       # builds main app ipa (auto + manual)
+└── build-site-ipa.yml                  # builds single-site wrapper ipa (manual)
 ```

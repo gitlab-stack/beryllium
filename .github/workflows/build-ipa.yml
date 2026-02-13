@@ -1,5 +1,6 @@
 # builds the main beryllium app into an unsigned .ipa
 # runs on github's macos runner with xcode pre-installed.
+# uses xcodegen to generate the xcode project from project.yml.
 # the output ipa is unsigned and can be sideloaded via
 # altstore, sidestore, trollstore, or any signing tool.
 
@@ -30,16 +31,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: select xcode version
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+        run: |
+          # find the latest xcode installed on the runner
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "error: no xcode installation found"
+            exit 1
+          fi
+          echo "using: $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
       - name: show xcode version
         run: xcodebuild -version
+
+      - name: install xcodegen
+        run: brew install xcodegen
+
+      # generate the .xcodeproj from the project.yml spec
+      - name: generate xcode project
+        run: xcodegen generate
 
       - name: resolve build configuration
         id: config
         run: |
           CONFIG="${{ github.event.inputs.build_configuration }}"
           echo "configuration=${CONFIG:-Release}" >> "$GITHUB_OUTPUT"
+
+      # list available schemes to verify generation worked
+      - name: list schemes
+        run: xcodebuild -project Beryllium.xcodeproj -list
 
       # build the app for ios device (arm64) without code signing.
       # this produces a .app that we manually package into an ipa.
@@ -51,12 +71,12 @@ jobs:
             -sdk iphoneos \
             -configuration ${{ steps.config.outputs.configuration }} \
             -archivePath build/Beryllium.xcarchive \
+            -destination "generic/platform=iOS" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            | tee build/xcodebuild.log
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES
 
       # package the .app into a proper .ipa (Payload/ zip structure)
       - name: package ipa

@@ -1,6 +1,7 @@
 // site editor - form for adding or editing a website configuration
 
 import SwiftUI
+import PhotosUI
 
 struct SiteEditorView: View {
     enum Mode {
@@ -21,7 +22,10 @@ struct SiteEditorView: View {
     @State private var enableFullScreen: Bool = false
     @State private var userAgent: String = ""
     @State private var iconColorHex: String = "007AFF"
+    @State private var iconSource: IconSource = .colorLetter
     @State private var showingShortcutInfo: Bool = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var isFetchingFavicon: Bool = false
 
     // track the original site id when editing
     private var editingID: UUID? {
@@ -44,9 +48,68 @@ struct SiteEditorView: View {
                     Text("website")
                 }
 
-                // appearance section
+                // icon section - custom image, favicon, or color letter
                 Section {
-                    Picker("icon color", selection: $iconColorHex) {
+                    // preview of the current icon
+                    HStack {
+                        Spacer()
+                        SiteIconView(
+                            site: WebSite(
+                                name: name.isEmpty ? "?" : name,
+                                iconColorHex: iconColorHex,
+                                iconSource: iconSource
+                            ),
+                            size: 80
+                        )
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+
+                    // pick from photo library
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("choose from photos", systemImage: "photo.on.rectangle")
+                    }
+                    .onChange(of: selectedPhoto) { newItem in
+                        guard let newItem else { return }
+                        Task {
+                            if let data = try? await newItem.loadTransferable(type: Data.self),
+                               let img = UIImage(data: data),
+                               let pngData = img.pngData() {
+                                iconSource = .customImage(pngData)
+                            }
+                        }
+                    }
+
+                    // fetch the site's favicon
+                    Button {
+                        fetchFavicon()
+                    } label: {
+                        HStack {
+                            Label("fetch site favicon", systemImage: "globe")
+                            if isFetchingFavicon {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(urlString.count < 8 || isFetchingFavicon)
+
+                    // reset to color letter
+                    if iconSource != .colorLetter {
+                        Button(role: .destructive) {
+                            iconSource = .colorLetter
+                            selectedPhoto = nil
+                        } label: {
+                            Label("remove custom icon", systemImage: "trash")
+                        }
+                    }
+                } header: {
+                    Text("icon")
+                }
+
+                // appearance section - fallback color for when no custom icon is set
+                Section {
+                    Picker("fallback color", selection: $iconColorHex) {
                         Label("blue", systemImage: "circle.fill").foregroundColor(.blue).tag("007AFF")
                         Label("red", systemImage: "circle.fill").foregroundColor(.red).tag("FF3B30")
                         Label("green", systemImage: "circle.fill").foregroundColor(.green).tag("34C759")
@@ -57,6 +120,8 @@ struct SiteEditorView: View {
                     }
                 } header: {
                     Text("appearance")
+                } footer: {
+                    Text("used when no custom icon is set.")
                 }
 
                 // orientation section
@@ -143,6 +208,7 @@ struct SiteEditorView: View {
                     enableFullScreen = site.enableFullScreen
                     userAgent = site.userAgent
                     iconColorHex = site.iconColorHex
+                    iconSource = site.iconSource
                 }
             }
         }
@@ -160,7 +226,8 @@ struct SiteEditorView: View {
             allowInlineMedia: allowInlineMedia,
             enableFullScreen: enableFullScreen,
             userAgent: userAgent,
-            iconColorHex: iconColorHex
+            iconColorHex: iconColorHex,
+            iconSource: iconSource
         )
 
         if editingID != nil {
@@ -169,5 +236,45 @@ struct SiteEditorView: View {
             siteStore.add(site)
         }
         dismiss()
+    }
+
+    // try to download the site's favicon and set it as the icon
+    private func fetchFavicon() {
+        guard let siteURL = URL(string: urlString),
+              let host = siteURL.host else { return }
+
+        isFetchingFavicon = true
+        let candidates = [
+            "https://\(host)/apple-touch-icon.png",
+            "https://\(host)/apple-touch-icon-precomposed.png",
+            "https://\(host)/favicon-192x192.png",
+            "https://\(host)/favicon-128x128.png",
+            "https://\(host)/favicon.ico",
+            "https://www.google.com/s2/favicons?domain=\(host)&sz=128"
+        ]
+
+        Task {
+            for candidate in candidates {
+                guard let url = URL(string: candidate) else { continue }
+                do {
+                    let (data, response) = try await URLSession.shared.data(from: url)
+                    if let httpResponse = response as? HTTPURLResponse,
+                       httpResponse.statusCode == 200,
+                       let img = UIImage(data: data),
+                       let pngData = img.pngData() {
+                        await MainActor.run {
+                            iconSource = .customImage(pngData)
+                            isFetchingFavicon = false
+                        }
+                        return
+                    }
+                } catch {
+                    continue
+                }
+            }
+            await MainActor.run {
+                isFetchingFavicon = false
+            }
+        }
     }
 }

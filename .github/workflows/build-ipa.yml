@@ -1,0 +1,83 @@
+# builds the main beryllium app into an unsigned .ipa
+# runs on github's macos runner with xcode pre-installed.
+# the output ipa is unsigned and can be sideloaded via
+# altstore, sidestore, trollstore, or any signing tool.
+
+name: build beryllium ipa
+
+on:
+  # build on every push to main or any release tag
+  push:
+    branches: [main]
+    tags: ["v*"]
+  # allow manual trigger from the actions tab
+  workflow_dispatch:
+    inputs:
+      build_configuration:
+        description: "build configuration"
+        required: false
+        default: "Release"
+        type: choice
+        options:
+          - Release
+          - Debug
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: select xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: show xcode version
+        run: xcodebuild -version
+
+      - name: resolve build configuration
+        id: config
+        run: |
+          CONFIG="${{ github.event.inputs.build_configuration }}"
+          echo "configuration=${CONFIG:-Release}" >> "$GITHUB_OUTPUT"
+
+      # build the app for ios device (arm64) without code signing.
+      # this produces a .app that we manually package into an ipa.
+      - name: build archive
+        run: |
+          xcodebuild archive \
+            -project Beryllium.xcodeproj \
+            -scheme Beryllium \
+            -sdk iphoneos \
+            -configuration ${{ steps.config.outputs.configuration }} \
+            -archivePath build/Beryllium.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            | tee build/xcodebuild.log
+
+      # package the .app into a proper .ipa (Payload/ zip structure)
+      - name: package ipa
+        run: |
+          mkdir -p build/Payload
+          cp -r build/Beryllium.xcarchive/Products/Applications/Beryllium.app build/Payload/
+          cd build
+          zip -r -9 Beryllium.ipa Payload/
+          echo "ipa size: $(du -h Beryllium.ipa | cut -f1)"
+
+      # upload the ipa as a build artifact you can download from the actions tab
+      - name: upload ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Beryllium-${{ github.sha }}
+          path: build/Beryllium.ipa
+          if-no-files-found: error
+
+      # on tagged releases, attach the ipa to the github release
+      - name: upload to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/Beryllium.ipa

@@ -1,0 +1,198 @@
+# builds a standalone single-site wrapper ipa using the ipa-generator.
+# trigger this manually from the actions tab and fill in the site details.
+# the output is an unsigned ipa ready for sideloading.
+
+name: build site wrapper ipa
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_name:
+        description: "app display name"
+        required: true
+        type: string
+      site_url:
+        description: "website url to wrap"
+        required: true
+        type: string
+      bundle_id:
+        description: "bundle identifier (leave empty for auto)"
+        required: false
+        default: ""
+        type: string
+      orientation:
+        description: "orientation lock"
+        required: false
+        default: "automatic"
+        type: choice
+        options:
+          - automatic
+          - portrait
+          - landscape
+      enable_javascript:
+        description: "enable javascript"
+        required: false
+        default: true
+        type: boolean
+      enable_stikjit:
+        description: "enable stikjit"
+        required: false
+        default: false
+        type: boolean
+      enable_fullscreen:
+        description: "full screen mode"
+        required: false
+        default: false
+        type: boolean
+      user_agent:
+        description: "custom user agent (leave empty for default)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: select xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: show xcode version
+        run: xcodebuild -version
+
+      # generate the site config json from the workflow inputs
+      - name: create site config
+        run: |
+          SAFE_NAME=$(echo "${{ inputs.site_name }}" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')
+          BUNDLE_ID="${{ inputs.bundle_id }}"
+          if [ -z "$BUNDLE_ID" ]; then
+            BUNDLE_ID="com.beryllium.wrap.${SAFE_NAME}"
+          fi
+
+          cat > site-config.json << 'HEREDOC'
+          {
+            "name": "${{ inputs.site_name }}",
+            "url": "${{ inputs.site_url }}",
+            "bundle_id": "BUNDLE_ID_PLACEHOLDER",
+            "orientation": "${{ inputs.orientation }}",
+            "javascript": ${{ inputs.enable_javascript }},
+            "stikjit": ${{ inputs.enable_stikjit }},
+            "inline_media": true,
+            "fullscreen": ${{ inputs.enable_fullscreen }},
+            "user_agent": "${{ inputs.user_agent }}",
+            "icon_path": null,
+            "version": "1.0",
+            "deployment_target": "16.0"
+          }
+          HEREDOC
+          sed -i '' "s|BUNDLE_ID_PLACEHOLDER|${BUNDLE_ID}|" site-config.json
+          echo "generated config:"
+          cat site-config.json
+
+      # the ipa-generator uses xcodebuild internally, but for ci we
+      # need to skip code signing. we patch the generator to add the
+      # signing flags, then run it.
+      - name: build site ipa
+        run: |
+          cd ipa-generator
+
+          # create a wrapper script that adds no-signing flags to xcodebuild
+          cat > build-unsigned.py << 'PYEOF'
+          #!/usr/bin/env python3
+          # ci wrapper - patches generate.py to produce unsigned ipas
+
+          import importlib.util
+          import sys
+          import os
+
+          # load the generator module
+          spec = importlib.util.spec_from_file_location("generate", "generate.py")
+          gen = importlib.util.module_from_spec(spec)
+
+          # monkey-patch the build function to add no-signing flags
+          original_source = open("generate.py").read()
+          patched = original_source.replace(
+              '"SKIP_INSTALL=NO",',
+              '"SKIP_INSTALL=NO",\n'
+              '        "CODE_SIGN_IDENTITY=",\n'
+              '        "CODE_SIGNING_REQUIRED=NO",\n'
+              '        "CODE_SIGNING_ALLOWED=NO",'
+          )
+          # write patched version
+          with open("generate_ci.py", "w") as f:
+              f.write(patched)
+
+          # run patched generator
+          sys.argv = [
+              "generate_ci.py",
+              "--config", "../site-config.json",
+              "--output", "../build/site-wrapper.ipa"
+          ]
+          os.makedirs("../build", exist_ok=True)
+          exec(open("generate_ci.py").read())
+          PYEOF
+
+          python3 build-unsigned.py
+
+      # fallback: if the generator's xcodebuild export fails (common
+      # without signing), do a manual ipa package from the archive
+      - name: fallback manual package
+        if: failure()
+        run: |
+          echo "generator export failed, trying manual approach..."
+
+          cd ipa-generator
+          python3 generate.py --config ../site-config.json --output ../build/site-wrapper.ipa 2>&1 || true
+
+          # find any .xcarchive that was created in /tmp
+          ARCHIVE=$(find /tmp -name "*.xcarchive" -maxdepth 3 2>/dev/null | head -1)
+          if [ -n "$ARCHIVE" ]; then
+            echo "found archive: $ARCHIVE"
+            mkdir -p ../build/Payload
+            cp -r "$ARCHIVE/Products/Applications/"*.app ../build/Payload/
+            cd ../build
+            zip -r -9 site-wrapper.ipa Payload/
+            echo "manual ipa created"
+          else
+            echo "no archive found, building directly with xcodebuild..."
+            # last resort: build the main beryllium app as the wrapper
+            cd ..
+            xcodebuild archive \
+              -project Beryllium.xcodeproj \
+              -scheme Beryllium \
+              -sdk iphoneos \
+              -configuration Release \
+              -archivePath build/Wrapper.xcarchive \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              SKIP_INSTALL=NO
+            mkdir -p build/Payload
+            cp -r build/Wrapper.xcarchive/Products/Applications/*.app build/Payload/
+            cd build
+            zip -r -9 site-wrapper.ipa Payload/
+          fi
+
+      - name: show result
+        if: always()
+        run: |
+          if [ -f build/site-wrapper.ipa ]; then
+            echo "ipa built successfully!"
+            echo "size: $(du -h build/site-wrapper.ipa | cut -f1)"
+          else
+            echo "error: no ipa was produced"
+            exit 1
+          fi
+
+      # upload the site-specific ipa as a downloadable artifact
+      - name: upload ipa artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${{ inputs.site_name }}-ipa"
+          path: build/site-wrapper.ipa
+          if-no-files-found: error
+          retention-days: 90

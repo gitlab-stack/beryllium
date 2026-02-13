@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion="1500" version="1.7">
+   <BuildAction buildImplicitDependencies="YES" parallelizeBuildables="YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForRunning="YES" buildForTesting="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
+            <BuildableReference
+               BuildableIdentifier="primary"
+               BlueprintIdentifier="A60000001"
+               BuildableName="Beryllium.app"
+               BlueprintName="Beryllium"
+               ReferencedContainer="container:Beryllium.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <LaunchAction selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">
+      <BuildableProductRunnable runnableDebuggingMode="0">
+         <BuildableReference
+            BuildableIdentifier="primary"
+            BlueprintIdentifier="A60000001"
+            BuildableName="Beryllium.app"
+            BlueprintName="Beryllium"
+            ReferencedContainer="container:Beryllium.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES">
+   </ArchiveAction>
+</Scheme>

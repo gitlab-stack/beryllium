@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject var siteStore: SiteStore
     @State private var showingAddSite = false
     @State private var selectedSite: WebSite?
+    @State private var siteToShare: WebSite?
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,13 @@ struct ContentView: View {
                                 .onTapGesture {
                                     selectedSite = site
                                 }
+                                .contextMenu {
+                                    Button {
+                                        siteToShare = site
+                                    } label: {
+                                        Label("add to home screen", systemImage: "square.and.arrow.up")
+                                    }
+                                }
                         }
                         .onDelete(perform: siteStore.remove)
                     }
@@ -53,6 +61,9 @@ struct ContentView: View {
             }
             .fullScreenCover(item: $selectedSite) { site in
                 WebContainerView(site: site)
+            }
+            .sheet(item: $siteToShare) { site in
+                ShareSheet(site: site)
             }
         }
     }

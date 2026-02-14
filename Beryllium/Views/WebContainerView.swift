@@ -13,6 +13,7 @@ struct WebContainerView: View {
     @State private var currentURL: String = ""
     @State private var showingEditSheet = false
     @State private var showControls = true
+    @State private var showingShareSheet = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -59,6 +60,11 @@ struct WebContainerView: View {
                             .font(.title3)
                     }
 
+                    Button { showingShareSheet = true } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title3)
+                    }
+
                     Spacer()
 
                     Button { showingEditSheet = true } label: {
@@ -84,8 +90,35 @@ struct WebContainerView: View {
         .sheet(isPresented: $showingEditSheet) {
             SiteEditorView(mode: .edit(site))
         }
+        .sheet(isPresented: $showingShareSheet) {
+            ShareSheet(site: site)
+        }
         .modifier(OrientationLockModifier(lock: site.orientationLock))
     }
+}
+
+// wraps UIActivityViewController for the share sheet
+struct ShareSheet: UIViewControllerRepresentable {
+    let site: WebSite
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        var items: [Any] = []
+
+        // the shortcut html page is the primary item — user can "add to home screen" from safari
+        if let shortcutURL = ShortcutManager.generateShortcutPage(for: site) {
+            items.append(shortcutURL)
+        }
+
+        // also include the site url as a fallback share item
+        if let siteURL = site.url {
+            items.append(siteURL)
+        }
+
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // notification names for controlling the webview from swiftui buttons

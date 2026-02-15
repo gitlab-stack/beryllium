@@ -63,7 +63,7 @@ struct ContentView: View {
                 WebContainerView(site: site)
             }
             .sheet(item: $siteToShare) { site in
-                ShareSheet(site: site)
+                AddToHomeScreenView(site: site)
             }
         }
     }

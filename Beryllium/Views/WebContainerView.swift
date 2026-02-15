@@ -91,34 +91,77 @@ struct WebContainerView: View {
             SiteEditorView(mode: .edit(site))
         }
         .sheet(isPresented: $showingShareSheet) {
-            ShareSheet(site: site)
+            AddToHomeScreenView(site: site)
         }
         .modifier(OrientationLockModifier(lock: site.orientationLock))
     }
 }
 
-// wraps UIActivityViewController for the share sheet
-struct ShareSheet: UIViewControllerRepresentable {
+// guided view for adding a home screen shortcut
+// starts a local http server and opens safari to the instruction page
+struct AddToHomeScreenView: View {
     let site: WebSite
+    @Environment(\.dismiss) private var dismiss
+    @State private var server = LocalServer()
 
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        var items: [Any] = []
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Spacer()
 
-        // the shortcut html page is the primary item — user can "add to home screen" from safari
-        if let shortcutURL = ShortcutManager.generateShortcutPage(for: site) {
-            items.append(shortcutURL)
+                SiteIconView(site: site, size: 80)
+
+                Text(site.name)
+                    .font(.title2.bold())
+
+                Text("add a home screen shortcut that opens this site directly in beryllium")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+
+                Spacer()
+
+                Button {
+                    openInSafari()
+                } label: {
+                    Label("add to home screen", systemImage: "plus.app")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal, 24)
+
+                Text("opens safari — follow the steps to add a shortcut")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Spacer()
+            }
+            .navigationTitle("home screen shortcut")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("done") { dismiss() }
+                }
+            }
         }
-
-        // also include the site url as a fallback share item
-        if let siteURL = site.url {
-            items.append(siteURL)
+        .onDisappear {
+            server.stop()
         }
-
-        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        return controller
     }
 
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+    private func openInSafari() {
+        let html = ShortcutManager.generateShortcutHTML(for: site)
+        server.start(html: html) { port in
+            guard let port = port else { return }
+            if let url = URL(string: "http://localhost:\(port)") {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
 }
 
 // notification names for controlling the webview from swiftui buttons
